@@ -117,6 +117,30 @@ function drawEnemy(ctx, e) {
     ctx.fillStyle = '#2a1b5e';
     circle(ctx, -e.r * 0.3, -e.r * 0.2, 2.5);
     circle(ctx, e.r * 0.3, -e.r * 0.2, 2.5);
+  } else if (e.type === 'splitter') {
+    // Splitting hex: a green hex ring with a bright core that cracks apart.
+    ctx.rotate(e.t * 0.7);
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const x = Math.cos(a) * e.r;
+      const y = Math.sin(a) * e.r;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#dcffe2';
+    ctx.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + Math.PI / 6;
+      const x = Math.cos(a) * e.r * 0.45;
+      const y = Math.sin(a) * e.r * 0.45;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fill();
   } else {
     // mine: spiked circle, pulsing
     const pulse = 1 + 0.18 * Math.sin(e.t * 4);
@@ -153,6 +177,16 @@ function drawEnemy(ctx, e) {
 
 function drawBullets(ctx, world) {
   for (const b of world.bullets) {
+    // Streak trail behind the bolt so fire reads at a glance.
+    ctx.save();
+    ctx.strokeStyle = PALETTE.bullet;
+    ctx.globalAlpha = 0.55;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(b.x - b.vx * 0.035, b.y - b.vy * 0.035);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.restore();
     glowCircle(ctx, b.x, b.y, b.r, PALETTE.bullet, 0.35);
     ctx.fillStyle = PALETTE.bullet;
     circle(ctx, b.x, b.y, b.r);
@@ -223,7 +257,9 @@ export function drawHUD(ctx, world) {
   ctx.fillStyle = 'rgba(8, 11, 28, 0.55)';
   ctx.fillRect(0, 0, VIEW.width, 46);
   text(ctx, `SCORE ${world.score.toLocaleString('en-US')}`, 16, 24, 20, PALETTE.hudText, 'left');
-  text(ctx, `WAVE ${world.wave}`, VIEW.width / 2, 24, 20, PALETTE.accent, 'center');
+  text(ctx, `WAVE ${world.wave}`, VIEW.width / 2, 20, 20, PALETTE.accent, 'center');
+  const dronesLeft = world.enemies.length + world.spawnQueue.length;
+  text(ctx, `${dronesLeft} DRONE${dronesLeft === 1 ? '' : 'S'} LEFT`, VIEW.width / 2, 39, 11, PALETTE.hudDim, 'center');
   drawHull(ctx, VIEW.width - 16 - (world.player.maxHull - 1) * 24 - 8, 24, world.player.hull, world.player.maxHull);
   // Combo meter under the score.
   if (world.combo > 1) {
@@ -254,19 +290,53 @@ function panel(ctx, x, y, w, h) {
 
 export function drawTitle(ctx, world) {
   panel(ctx, VIEW.width / 2 - 330, 92, 660, 330);
-  text(ctx, 'STARFALL', VIEW.width / 2, 158, 64, PALETTE.ship, 'center', 'bold');
-  text(ctx, 'SALVAGE', VIEW.width / 2, 218, 64, PALETTE.gold, 'center', 'bold');
-  text(ctx, 'Collect the cores. Blast the drones. Survive the waves.', VIEW.width / 2, 268, 17, PALETTE.hudText, 'center', 'normal');
-  text(ctx, 'WASD / arrows — fly      Mouse — aim      Click / Space — fire', VIEW.width / 2, 308, 15, PALETTE.hudDim, 'center', 'normal');
-  text(ctx, 'Clear a wave to pick an upgrade. Three hits and your run ends.', VIEW.width / 2, 334, 15, PALETTE.hudDim, 'center', 'normal');
+  text(ctx, 'A NEON ARENA SURVIVAL GAME', VIEW.width / 2, 126, 13, PALETTE.accent, 'center', 'bold');
+  text(ctx, 'STARFALL', VIEW.width / 2, 168, 64, PALETTE.ship, 'center', 'bold');
+  text(ctx, 'SALVAGE', VIEW.width / 2, 228, 64, PALETTE.gold, 'center', 'bold');
+  text(ctx, 'Collect the cores. Blast the drones. Survive the waves.', VIEW.width / 2, 276, 17, PALETTE.hudText, 'center', 'normal');
+  text(ctx, 'WASD / arrows — fly      Mouse — aim      Click / Space — fire', VIEW.width / 2, 312, 15, PALETTE.hudDim, 'center', 'normal');
+  text(ctx, 'Clear a wave to pick an upgrade. Three hits and your run ends.', VIEW.width / 2, 336, 15, PALETTE.hudDim, 'center', 'normal');
+  text(ctx, '5 drone types  ·  6 upgrades  ·  combos to x3.00', VIEW.width / 2, 362, 13, PALETTE.gold, 'center', 'bold');
   const blink = 0.65 + 0.35 * Math.sin(world.time * 4);
   ctx.save();
   ctx.globalAlpha = blink;
-  text(ctx, 'PRESS ENTER TO LAUNCH', VIEW.width / 2, 384, 22, PALETTE.accent, 'center', 'bold');
+  text(ctx, 'PRESS ENTER TO LAUNCH', VIEW.width / 2, 396, 22, PALETTE.accent, 'center', 'bold');
   ctx.restore();
   if (world.best > 0) {
     text(ctx, `BEST SCORE  ${world.best.toLocaleString('en-US')}`, VIEW.width / 2, 446, 15, PALETTE.gold, 'center', 'bold');
   }
+}
+
+// One small glyph per upgrade, drawn in the card above its name.
+function drawUpgradeIcon(ctx, id, cx, cy) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.strokeStyle = PALETTE.accent;
+  ctx.fillStyle = PALETTE.accent;
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  if (id === 'twin') {
+    ctx.beginPath(); ctx.moveTo(-9, -8); ctx.lineTo(-9, 8); ctx.moveTo(9, -8); ctx.lineTo(9, 8); ctx.stroke();
+    circle(ctx, -9, -8, 2.5); circle(ctx, 9, -8, 2.5);
+  } else if (id === 'rapid') {
+    for (const dx of [-10, 0, 10]) {
+      ctx.beginPath(); ctx.moveTo(dx - 4, -7); ctx.lineTo(dx, 0); ctx.lineTo(dx - 4, 7); ctx.stroke();
+    }
+  } else if (id === 'pierce') {
+    ctx.beginPath(); ctx.moveTo(-13, 0); ctx.lineTo(13, 0); ctx.stroke();
+    poly(ctx, [[13, -5], [20, 0], [13, 5]]);
+    circle(ctx, -5, 0, 3.5); circle(ctx, 5, 0, 3.5);
+  } else if (id === 'hull') {
+    ctx.beginPath(); ctx.arc(-4, -2, 4.5, 0, Math.PI * 2); ctx.arc(4, -2, 4.5, 0, Math.PI * 2); ctx.fill();
+    poly(ctx, [[-8, -1], [8, -1], [0, 9]]);
+  } else if (id === 'magnet') {
+    ctx.beginPath(); ctx.arc(0, -2, 9, Math.PI, 0); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(-9, -2); ctx.lineTo(-9, 8); ctx.moveTo(9, -2); ctx.lineTo(9, 8); ctx.stroke();
+  } else if (id === 'shield') {
+    ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, 4, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.restore();
 }
 
 export function drawUpgrade(ctx, world) {
@@ -293,16 +363,25 @@ export function drawUpgrade(ctx, world) {
     ctx.fill();
     ctx.stroke();
     ctx.restore();
-    text(ctx, `[${i + 1}]`, x + cardW / 2, y0 + 30, 16, PALETTE.accent, 'center', 'bold');
-    text(ctx, u.name, x + cardW / 2, y0 + 66, 20, PALETTE.hudText, 'center', 'bold');
+    text(ctx, `[${i + 1}]`, x + cardW / 2, y0 + 26, 16, PALETTE.accent, 'center', 'bold');
+    drawUpgradeIcon(ctx, u.id, x + cardW / 2, y0 + 54);
+    text(ctx, u.name, x + cardW / 2, y0 + 90, 20, PALETTE.hudText, 'center', 'bold');
     // Wrap the blurb to two lines by hand: it is short by design.
     const words = u.blurb.split(' ');
     const mid = Math.ceil(words.length / 2);
-    text(ctx, words.slice(0, mid).join(' '), x + cardW / 2, y0 + 106, 14, PALETTE.hudDim, 'center', 'normal');
-    text(ctx, words.slice(mid).join(' '), x + cardW / 2, y0 + 130, 14, PALETTE.hudDim, 'center', 'normal');
-    text(ctx, 'click or press ' + (i + 1), x + cardW / 2, y0 + 164, 12, PALETTE.hudDim, 'center', 'normal');
+    text(ctx, words.slice(0, mid).join(' '), x + cardW / 2, y0 + 122, 14, PALETTE.hudDim, 'center', 'normal');
+    text(ctx, words.slice(mid).join(' '), x + cardW / 2, y0 + 144, 14, PALETTE.hudDim, 'center', 'normal');
+    text(ctx, 'click or press ' + (i + 1), x + cardW / 2, y0 + 170, 12, PALETTE.hudDim, 'center', 'normal');
   });
   text(ctx, `SCORE ${world.score.toLocaleString('en-US')}   ·   SALVAGE ${world.salvageCollected}`, VIEW.width / 2, y0 + cardH + 46, 16, PALETTE.hudText, 'center', 'bold');
+}
+
+function rankForScore(score) {
+  if (score >= 5000) return 'ACE SALVAGER';
+  if (score >= 2500) return 'VETERAN SALVAGER';
+  if (score >= 1200) return 'SEASONED SALVAGER';
+  if (score >= 500) return 'ROOKIE SALVAGER';
+  return 'GREENHORN';
 }
 
 export function drawGameOver(ctx, world) {
@@ -312,16 +391,17 @@ export function drawGameOver(ctx, world) {
   ctx.restore();
   panel(ctx, VIEW.width / 2 - 300, 108, 600, 300);
   text(ctx, 'SIGNAL LOST', VIEW.width / 2, 168, 52, PALETTE.danger, 'center', 'bold');
-  text(ctx, 'Your skiff broke apart in the debris field.', VIEW.width / 2, 214, 16, PALETTE.hudText, 'center', 'normal');
-  text(ctx, `FINAL SCORE  ${world.score.toLocaleString('en-US')}`, VIEW.width / 2, 262, 24, PALETTE.gold, 'center', 'bold');
-  text(ctx, `WAVE ${world.wave}   ·   SALVAGE ${world.salvageCollected}   ·   DRONES DOWN ${world.kills}`, VIEW.width / 2, 298, 15, PALETTE.hudDim, 'center', 'normal');
+  text(ctx, 'Your skiff broke apart in the debris field.', VIEW.width / 2, 212, 16, PALETTE.hudText, 'center', 'normal');
+  text(ctx, `FINAL SCORE  ${world.score.toLocaleString('en-US')}`, VIEW.width / 2, 256, 24, PALETTE.gold, 'center', 'bold');
+  text(ctx, `WAVE ${world.wave}   ·   SALVAGE ${world.salvageCollected}   ·   DRONES DOWN ${world.kills}`, VIEW.width / 2, 292, 15, PALETTE.hudDim, 'center', 'normal');
+  text(ctx, `RANK: ${rankForScore(world.score)}`, VIEW.width / 2, 322, 15, PALETTE.accent, 'center', 'bold');
   if (world.score >= world.best && world.score > 0) {
-    text(ctx, 'NEW BEST SCORE', VIEW.width / 2, 330, 16, PALETTE.accent, 'center', 'bold');
+    text(ctx, 'NEW BEST SCORE', VIEW.width / 2, 348, 16, PALETTE.accent, 'center', 'bold');
   }
   const blink = 0.65 + 0.35 * Math.sin(world.time * 4);
   ctx.save();
   ctx.globalAlpha = blink;
-  text(ctx, 'PRESS ENTER TO FLY AGAIN', VIEW.width / 2, 372, 20, PALETTE.accent, 'center', 'bold');
+  text(ctx, 'PRESS ENTER TO FLY AGAIN', VIEW.width / 2, 382, 20, PALETTE.accent, 'center', 'bold');
   ctx.restore();
 }
 
@@ -332,6 +412,38 @@ export function drawPaused(ctx, world) {
   ctx.restore();
   text(ctx, 'PAUSED', VIEW.width / 2, VIEW.height / 2 - 10, 44, PALETTE.hudText, 'center', 'bold');
   text(ctx, 'Press P to resume', VIEW.width / 2, VIEW.height / 2 + 34, 16, PALETTE.hudDim, 'center', 'normal');
+}
+
+function drawWaveBanner(ctx, world) {
+  if (world.waveBanner <= 0 || world.state !== 'playing') return;
+  const a = Math.min(1, world.waveBanner / 0.6) * Math.min(1, (2.0 - world.waveBanner) / 0.25 + 0.2);
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, a));
+  text(ctx, `WAVE ${world.wave}`, VIEW.width / 2, VIEW.height / 2 - 70, 46, PALETTE.accent, 'center', 'bold');
+  text(ctx, 'CLEAR ALL DRONES', VIEW.width / 2, VIEW.height / 2 - 30, 15, PALETTE.hudText, 'center', 'bold');
+  ctx.restore();
+}
+
+function drawCrosshair(ctx, world) {
+  if (world.state !== 'playing') return;
+  const x = world.aimX;
+  const y = world.aimY;
+  ctx.save();
+  ctx.strokeStyle = PALETTE.accent;
+  ctx.globalAlpha = 0.85;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(x, y, 11, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x - 17, y); ctx.lineTo(x - 7, y);
+  ctx.moveTo(x + 7, y); ctx.lineTo(x + 17, y);
+  ctx.moveTo(x, y - 17); ctx.lineTo(x, y - 7);
+  ctx.moveTo(x, y + 7); ctx.lineTo(x, y + 17);
+  ctx.stroke();
+  ctx.fillStyle = PALETTE.accent;
+  circle(ctx, x, y, 1.5);
+  ctx.restore();
 }
 
 export function drawScene(ctx, world) {
@@ -356,6 +468,10 @@ export function drawScene(ctx, world) {
     ctx.restore();
   }
   if (world.state === 'playing' || world.state === 'paused') drawHUD(ctx, world);
+  if (world.state === 'playing') {
+    drawWaveBanner(ctx, world);
+    drawCrosshair(ctx, world);
+  }
   if (world.state === 'title') drawTitle(ctx, world);
   if (world.state === 'upgrade') drawUpgrade(ctx, world);
   if (world.state === 'gameover') drawGameOver(ctx, world);

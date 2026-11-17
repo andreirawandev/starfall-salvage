@@ -44,6 +44,27 @@ input.onFirstGesture = () => sounds.unlock();
 const world = createWorld(shot ? shotSeed : (Date.now() % 2147483647));
 world.best = loadBest();
 
+// Read-only hook for scripted play-tests (and curious players): the
+// live state, never a way to change it. Harmless in the shipped game.
+window.__starfall = {
+  snapshot: () => ({
+    state: world.state,
+    time: Math.round(world.time * 10) / 10,
+    wave: world.wave,
+    score: world.score,
+    kills: world.kills,
+    salvage: world.salvageCollected,
+    hull: world.player.hull,
+    combo: Number(world.combo.toFixed(2)),
+    invuln: Math.round(world.player.invuln * 100) / 100,
+    enemies: world.enemies.length,
+    queued: world.spawnQueue.length,
+    bullets: world.bullets.length,
+    player: { x: Math.round(world.player.x), y: Math.round(world.player.y) },
+    foes: world.enemies.map((e) => ({ t: e.type, x: Math.round(e.x), y: Math.round(e.y) })),
+  }),
+};
+
 function fitCanvas() {
   const scale = Math.min(
     window.innerWidth / VIEW.width,
@@ -128,16 +149,18 @@ function poseShot() {
   // frame so the screenshot is stable and repeatable.
   const dt = 1 / 60;
   if (shot === 'start') {
-    // A few drifters posed behind the title panel for life.
+    // Posed drones in the corners, clear of the title panel (which
+    // spans x 150..810, y 92..422), plus a splitter up top for colour.
     world.enemies = [
-      { type: 'drifter', x: 150, y: 120, vx: 0, vy: 0, hp: 1, maxHp: 1, r: 16, t: 0.7, fireTimer: 2, baseSpeed: 90, seed: 1 },
-      { type: 'chaser', x: 810, y: 110, vx: 0, vy: 0, hp: 2, maxHp: 2, r: 14, t: 1.9, fireTimer: 2, baseSpeed: 130, seed: 2 },
-      { type: 'weaver', x: 820, y: 440, vx: 0, vy: 0, hp: 2, maxHp: 2, r: 15, t: 0.4, fireTimer: 2, baseSpeed: 80, seed: 3 },
-      { type: 'drifter', x: 130, y: 450, vx: 0, vy: 0, hp: 1, maxHp: 1, r: 16, t: 2.6, fireTimer: 2, baseSpeed: 90, seed: 4 },
+      { id: 101, type: 'drifter', x: 95, y: 75, vx: 0, vy: 0, hp: 1, maxHp: 1, r: 16, t: 0.7, fireTimer: 2, baseSpeed: 90, seed: 1 },
+      { id: 102, type: 'chaser', x: 872, y: 78, vx: 0, vy: 0, hp: 2, maxHp: 2, r: 14, t: 1.9, fireTimer: 2, baseSpeed: 130, seed: 2 },
+      { id: 103, type: 'weaver', x: 868, y: 468, vx: 0, vy: 0, hp: 2, maxHp: 2, r: 15, t: 0.4, fireTimer: 2, baseSpeed: 80, seed: 3 },
+      { id: 104, type: 'drifter', x: 92, y: 468, vx: 0, vy: 0, hp: 1, maxHp: 1, r: 16, t: 2.6, fireTimer: 2, baseSpeed: 90, seed: 4 },
+      { id: 105, type: 'splitter', x: 480, y: 62, vx: 0, vy: 0, hp: 2, maxHp: 2, r: 17, t: 1.1, fireTimer: 2, baseSpeed: 70, seed: 5 },
     ];
     world.salvage = [
-      { x: 700, y: 130, vx: 0, vy: 0, t: 0.5 },
-      { x: 250, y: 430, vx: 0, vy: 0, t: 2.1 },
+      { x: 120, y: 300, vx: 0, vy: 0, t: 0.5 },
+      { x: 845, y: 300, vx: 0, vy: 0, t: 2.1 },
     ];
     world.time = 3;
     return;
@@ -155,12 +178,16 @@ function poseShot() {
         continue;
       }
       if (world.state === 'gameover') break;
-      // Freeze on a busy frame: several drones on screen and bolts flying.
+      // Freeze on a busy frame: several drones on screen and bolts flying,
+      // with the fight near the middle so the frame reads at a glance.
       const onScreen = world.enemies.filter(
         (e) => e.x > 0 && e.x < VIEW.width && e.y > 0 && e.y < VIEW.height,
       ).length;
-      if (world.wave >= 2 && onScreen >= 3 && world.bullets.length >= 2 && steps > 60 * 6) break;
-      if (world.wave >= 2 && world.enemies.length >= 4 && steps > 60 * 25) break;
+      const central = world.enemies.filter(
+        (e) => e.x > 200 && e.x < 760 && e.y > 100 && e.y < 440,
+      ).length;
+      if (world.wave >= 3 && onScreen >= 5 && central >= 3 && world.bullets.length >= 3 && steps > 60 * 6) break;
+      if (world.wave >= 3 && world.enemies.length >= 5 && steps > 60 * 30) break;
     } else if (shot === 'upgrade') {
       if (world.state === 'upgrade') break;
       if (world.state === 'gameover') break;
@@ -179,6 +206,21 @@ function poseShot() {
     }
   }
   world.events.length = 0;
+  // Aim the crosshair at the nearest drone so the frozen frame reads
+  // as a moment of play, not a paused backdrop.
+  if (world.enemies.length > 0) {
+    let nearest = world.enemies[0];
+    let nearestD = Infinity;
+    for (const e of world.enemies) {
+      const d = Math.hypot(e.x - world.player.x, e.y - world.player.y);
+      if (d < nearestD) {
+        nearestD = d;
+        nearest = e;
+      }
+    }
+    world.aimX = nearest.x;
+    world.aimY = nearest.y;
+  }
 }
 
 if (shot) {
@@ -196,6 +238,9 @@ if (shot) {
     score: world.score,
     bullets: world.bullets.length,
     enemies: world.enemies.length,
+    onScreen: world.enemies.filter(
+      (e) => e.x > 0 && e.x < VIEW.width && e.y > 0 && e.y < VIEW.height,
+    ).length,
     salvage: world.salvage.length,
   });
   window.__shotReady = true;
@@ -271,6 +316,8 @@ function frame(now) {
   }
 
   if (!paused && world.state === 'playing') {
+    world.aimX = input.mouseX;
+    world.aimY = input.mouseY;
     const snapshot = {
       move: input.moveVector(),
       aimX: input.mouseX,

@@ -46,6 +46,10 @@ export function createWorld(seed) {
     spawnQueue: [],
     spawnTimer: 0,
     betweenTimer: 0,
+    waveBanner: 0,
+    nextId: 1,
+    aimX: VIEW.width / 2,
+    aimY: VIEW.height / 2 - 100,
     score: 0,
     salvageCollected: 0,
     combo: 1,
@@ -71,6 +75,7 @@ function freshPlayer() {
     invuln: 0,
     shots: 1,
     fireInterval: PLAYER.fireInterval,
+    pierce: 0,
     magnetRadius: PLAYER.magnetRadius,
     shield: false,
     shieldUsed: false,
@@ -102,7 +107,10 @@ function waveComposition(world, n) {
   const table = WAVES.table;
   const base = table[Math.min(n - 1, table.length - 1)];
   const comp = { ...base };
-  if (n > table.length) comp.drifter += (n - table.length) * 2;
+  if (n > table.length) {
+    comp.drifter += (n - table.length) * 2;
+    comp.splitter += (n - table.length);
+  }
   return comp;
 }
 
@@ -121,6 +129,7 @@ function beginWave(world) {
   world.spawnQueue = queue;
   world.spawnTimer = 0.4;
   world.betweenTimer = 0;
+  world.waveBanner = 2.0;
 }
 
 function spawnEnemy(world, type) {
@@ -136,6 +145,7 @@ function spawnEnemy(world, type) {
   else { x = VIEW.width + m; y = range(world.rng, m, VIEW.height - m); }
   const a = Math.atan2(VIEW.height / 2 - y, VIEW.width / 2 - x);
   const enemy = {
+    id: world.nextId++,
     type,
     x, y,
     vx: Math.cos(a) * def.speed * speedScale,
@@ -196,6 +206,29 @@ function killEnemy(world, enemy, index) {
   burst(world, enemy.x, enemy.y, enemyColor(enemy.type), FX.particlesPerExplosion);
   dropSalvage(world, enemy.x, enemy.y, def.salvage);
   world.events.push({ type: 'explosion', big: enemy.type === 'weaver' });
+  if (enemy.type === 'splitter') {
+    // A splitter breaks into two drifters that scatter outward.
+    for (let k = 0; k < 2; k++) {
+      const a = world.rng() * Math.PI * 2;
+      const d = ENEMIES.drifter;
+      world.enemies.push({
+        id: world.nextId++,
+        type: 'drifter',
+        x: enemy.x + Math.cos(a) * 20,
+        y: enemy.y + Math.sin(a) * 20,
+        vx: Math.cos(a) * d.speed,
+        vy: Math.sin(a) * d.speed,
+        hp: d.hp,
+        maxHp: d.hp,
+        r: d.radius,
+        t: 0,
+        fireTimer: 2,
+        baseSpeed: d.speed,
+        seed: world.rng() * Math.PI * 2,
+      });
+    }
+    addFloat(world, enemy.x, enemy.y - 24, 'SPLIT!', '#7dff8a');
+  }
   if (enemy.type === 'mine') {
     // A mine's death is a blast: anything close takes a hit.
     world.shake = Math.max(world.shake, FX.shakeOnDeath);
@@ -213,7 +246,7 @@ function killEnemy(world, enemy, index) {
 }
 
 export function enemyColor(type) {
-  return { drifter: '#ff5da2', chaser: '#ff9f43', weaver: '#b388ff', mine: '#ff5252' }[type];
+  return { drifter: '#ff5da2', chaser: '#ff9f43', weaver: '#b388ff', splitter: '#7dff8a', mine: '#ff5252' }[type];
 }
 
 // End the run through the real damage path: the hull drains hit by
@@ -269,6 +302,7 @@ function offerUpgrades(world) {
   }
   world.upgradeChoices = choices;
   world.state = 'upgrade';
+  world.floats.length = 0; // keep the bonus text off the upgrade cards
   world.events.push({ type: 'waveClear' });
 }
 
@@ -333,6 +367,8 @@ function stepPlayer(world, input, dt) {
         vy: Math.sin(a) * PLAYER.bulletSpeed + p.vy * 0.4,
         r: PLAYER.bulletRadius,
         life: 0.9,
+        pierce: p.pierce,
+        hit: new Set(),
       });
     }
     world.events.push({ type: 'shoot' });
@@ -344,13 +380,27 @@ function stepEnemies(world, dt) {
   for (let i = world.enemies.length - 1; i >= 0; i--) {
     const e = world.enemies[i];
     e.t += dt;
-    if (e.type === 'drifter') {
+    if (e.type === 'drifter' || e.type === 'splitter') {
       e.x += e.vx * dt;
       e.y += e.vy * dt;
       if (e.x < e.r || e.x > VIEW.width - e.r) e.vx *= -1;
       if (e.y < e.r || e.y > VIEW.height - e.r) e.vy *= -1;
       e.x = Math.max(e.r, Math.min(VIEW.width - e.r, e.x));
       e.y = Math.max(e.r, Math.min(VIEW.height - e.r, e.y));
+      // Lean toward the player so a wave can never stall out, and lunge
+      // once close: without the lunge drifters settle into a stable
+      // orbit just outside touching distance and never land a hit.
+      const pa = Math.atan2(p.y - e.y, p.x - e.x);
+      const pd = Math.hypot(p.x - e.x, p.y - e.y);
+      const lunge = pd < 140 ? 240 : 80;
+      e.vx += Math.cos(pa) * lunge * dt;
+      e.vy += Math.sin(pa) * lunge * dt;
+      const sp = Math.hypot(e.vx, e.vy);
+      const cap = e.baseSpeed * 1.3;
+      if (sp > cap) {
+        e.vx = (e.vx / sp) * cap;
+        e.vy = (e.vy / sp) * cap;
+      }
     } else if (e.type === 'chaser') {
       const a = Math.atan2(p.y - e.y, p.x - e.x);
       const wobble = Math.sin(e.t * 3 + e.seed) * 0.4;
@@ -383,7 +433,7 @@ function stepEnemies(world, dt) {
     }
     // Contact with the player hurts.
     const d = Math.hypot(p.x - e.x, p.y - e.y);
-    if (d < p.r + e.r - 2 && world.state === 'playing') {
+    if (d < PLAYER.radius + e.r - 2 && world.state === 'playing') {
       damagePlayer(world, 1);
       // The enemy is knocked away so one touch is not a double hit.
       const a = Math.atan2(e.y - p.y, e.x - p.x);
@@ -405,12 +455,18 @@ function stepBullets(world, dt) {
     }
     for (let j = world.enemies.length - 1; j >= 0; j--) {
       const e = world.enemies[j];
+      if (b.hit.has(e.id)) continue;
       if (Math.hypot(b.x - e.x, b.y - e.y) < b.r + e.r) {
-        world.bullets.splice(i, 1);
+        b.hit.add(e.id);
         e.hp -= 1;
         world.events.push({ type: 'enemyHit' });
         burst(world, b.x, b.y, enemyColor(e.type), 5, 110);
         if (e.hp <= 0) killEnemy(world, e, j);
+        if (b.pierce > 0) {
+          b.pierce -= 1;
+        } else {
+          world.bullets.splice(i, 1);
+        }
         break;
       }
     }
@@ -488,6 +544,7 @@ export function updateWorld(world, input, dt) {
   world.time += dt;
   world.shake = Math.max(0, world.shake - FX.shakeDecay * dt);
   world.flash = Math.max(0, world.flash - dt * 1.4);
+  world.waveBanner = Math.max(0, world.waveBanner - dt);
   world.comboTimer = Math.max(0, world.comboTimer - dt);
   if (world.comboTimer === 0) world.combo = 1;
   stepParticles(world, dt);

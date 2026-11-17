@@ -22,6 +22,7 @@ export const PALETTE = {
   drifter: '#ff5da2',
   chaser: '#ff9f43',
   weaver: '#b388ff',
+  splitter: '#7dff8a',
   mine: '#ff5252',
   enemyBullet: '#ff7ad9',
   particle: '#ffffff',
@@ -54,6 +55,7 @@ export const ENEMIES = {
   drifter: { radius: 16, hp: 1, speed: 90, score: 50, salvage: 1 },
   chaser: { radius: 14, hp: 2, speed: 130, score: 100, salvage: 2 },
   weaver: { radius: 15, hp: 2, speed: 80, score: 150, salvage: 2 },
+  splitter: { radius: 17, hp: 2, speed: 70, score: 150, salvage: 2 },
   mine: { radius: 13, hp: 1, speed: 0, score: 75, salvage: 1 },
 };
 
@@ -61,15 +63,15 @@ export const WAVES = {
   // How many of each enemy a wave fields. The wave table is data, not
   // code, so the difficulty curve is easy to read and retune.
   table: [
-    { drifter: 5, chaser: 0, weaver: 0, mine: 0 },
-    { drifter: 7, chaser: 2, weaver: 0, mine: 0 },
-    { drifter: 6, chaser: 4, weaver: 2, mine: 0 },
-    { drifter: 8, chaser: 5, weaver: 3, mine: 2 },
-    { drifter: 9, chaser: 6, weaver: 4, mine: 4 },
-    { drifter: 10, chaser: 8, weaver: 5, mine: 5 },
-    { drifter: 12, chaser: 9, weaver: 6, mine: 6 },
+    { drifter: 5, chaser: 0, weaver: 0, splitter: 0, mine: 0 },
+    { drifter: 7, chaser: 2, weaver: 0, splitter: 0, mine: 0 },
+    { drifter: 6, chaser: 4, weaver: 2, splitter: 1, mine: 0 },
+    { drifter: 8, chaser: 5, weaver: 3, splitter: 2, mine: 2 },
+    { drifter: 9, chaser: 6, weaver: 4, splitter: 3, mine: 4 },
+    { drifter: 10, chaser: 8, weaver: 5, splitter: 3, mine: 5 },
+    { drifter: 12, chaser: 9, weaver: 6, splitter: 4, mine: 6 },
   ],
-  spawnInterval: 0.9,
+  spawnInterval: 0.75,
   betweenWaveDelay: 2.2,
   clearBonus: 250,
 };
@@ -86,6 +88,12 @@ export const UPGRADES = [
     name: 'Rapid Cycler',
     blurb: 'Fire 35% faster.',
     apply: (p) => { p.fireInterval *= 0.65; },
+  },
+  {
+    id: 'pierce',
+    name: 'Piercing Rounds',
+    blurb: 'Bolts punch through one extra drone.',
+    apply: (p) => { p.pierce += 1; },
   },
   {
     id: 'hull',

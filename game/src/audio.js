@@ -13,6 +13,8 @@ export class SoundBank {
     this.ctx = null;
     this.muted = false;
     this.master = null;
+    this.musicTimer = null;
+    this.musicStep = 0;
   }
 
   // Call from the first user gesture; creating the context earlier is
@@ -24,6 +26,41 @@ export class SoundBank {
     this.master = this.ctx.createGain();
     this.master.gain.value = 0.32;
     this.master.connect(this.ctx.destination);
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+    this.startMusic();
+  }
+
+  // Generative background music: a slow detuned pad under a sparse
+  // pentatonic pluck. No audio files, no fixed loop to tire of, and
+  // far quieter than the effects so it never drowns them.
+  startMusic() {
+    if (!this.ctx || this.musicTimer) return;
+    const padGain = this.ctx.createGain();
+    padGain.gain.value = 0.035;
+    padGain.connect(this.master);
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 700;
+    filter.connect(padGain);
+    for (const freq of [110, 110.7, 164.81]) {
+      const osc = this.ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      osc.connect(filter);
+      osc.start();
+    }
+    const scale = [220, 261.63, 293.66, 329.63, 392, 440, 523.25];
+    this.musicTimer = setInterval(() => {
+      if (this.muted || !this.ctx) return;
+      this.musicStep += 1;
+      // Pluck on most beats, rest on some, so the line breathes.
+      if (this.musicStep % 4 === 3) return;
+      const note = scale[Math.floor(Math.random() * scale.length)];
+      this.tone({ type: 'triangle', from: note, to: note, dur: 0.5, vol: 0.055 });
+      if (this.musicStep % 8 === 0) {
+        this.tone({ type: 'sine', from: note / 2, to: note / 2, dur: 0.9, vol: 0.06 });
+      }
+    }, 420);
   }
 
   toggleMute() {

@@ -4,7 +4,7 @@
 [![rank](https://make.fun/badge/best-game-01/andreirawandev/starfall-salvage/rank.svg)](https://make.fun/bounty/best-game-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=best-game-01)
 [![reward](https://make.fun/badge/best-game-01/andreirawandev/starfall-salvage/reward.svg)](https://make.fun/bounty/best-game-01?utm_source=github&utm_medium=readme&utm_campaign=best-game-01)
 
-Starfall Salvage is a neon arcade arena survival game: pilot a salvage skiff through a debris field, collect glowing salvage cores, blast rogue drones and mines, and survive escalating waves. Clear a wave to pick one of three upgrades — twin blasters, rapid fire, a reinforced hull, a magnet array, or an aegis shield — and chase a combo multiplier on every core you grab. Three hits and your run ends.
+Starfall Salvage is a neon arcade arena survival game: pilot a salvage skiff through a debris field, collect glowing salvage cores, blast rogue drones and mines, and survive escalating waves. Five drone types hunt you — drifters, chasers, weavers, splitters that break into two drifters, and mines that detonate — and clearing a wave lets you pick one of three upgrades: twin blasters, rapid fire, piercing rounds, a reinforced hull, a magnet array, or an aegis shield. Chain pickups into a combo multiplier up to x3.00, watch the wave banner and drones-left counter, and chase a pilot rank from Greenhorn to Ace Salvager. Three hits and your run ends. All sound — effects and the generative ambient score — is synthesized live with the Web Audio API.
 
 ## Run it
 
